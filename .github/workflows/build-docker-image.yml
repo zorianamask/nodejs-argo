@@ -1,14 +1,14 @@
 name: Build and Push Docker Image
 
-于:
+on:
   push:
-    分支: [ main ]
+    # 任意分支发生以下文件修改都会触发
     paths:
       - 'Dockerfile'
       - 'index.js'
       - 'package.json'
   pull_request:
-    分支: [ main ]
+    # 针对任意分支的 PR 都会触发
   workflow_dispatch:
 
 jobs:
@@ -32,15 +32,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # 【新增步骤】自动提取元数据并生成动态标签
+      - name: Extract Metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/node3444
+          tags: |
+            # 如果是分支提交，生成以分支名命名的标签 (如 :main, :dev)
+            type=ref,event=branch
+            # 如果是 PR 提交，生成以 pr-号 命名的标签 (如 :pr-12)
+            type=ref,event=pr
+            # 只有在默认主分支（通常是 main）上提交时，才生成 :latest 标签
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          标签: |
-            ghcr.io/${{ github.repository_owner }}/node3444:latest
+          # 使用上面步骤自动生成的动态标签和标签描述
+          tags: ${{ steps.meta.outputs.tags }}
           labels: |
+            ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=HTTP Server
             org.opencontainers.image.licenses=MIT
